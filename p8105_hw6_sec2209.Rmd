@@ -1,0 +1,83 @@
+---
+title: "P8105 Homework 6"
+author: "sarah_8105"
+output: github_document
+---
+
+
+This is my sixth homework assignment for P8105.
+
+```{r libraries}
+library(tidyverse)
+library(rvest)
+library(readr)
+library(httr)
+
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+
+## Problem 1
+
+In this first code chunk, I pull the Washington Post data on homicides in 50 large US cities. I create a `city_state` variable that concatenates the city and state that the homicide occurred in and remove an observation that was erroneously attributed to Tulsa, AL. 
+
+```{r p1_import, cache = TRUE}
+homicide_df = read_csv(file = "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv") %>%
+  mutate(
+    city_state = str_c(city, state, sep = "_")
+  ) %>%
+  select(city_state, disposition) %>%
+  filter(city_state != "Tulsa_AL")
+```
+
+
+
+
+## Problem 2
+
+Problem 2 concerns data from a longitudinal study that includes control and experimental study arms. In the following code chunk, I import data on each study participant that have been stored as separate csv files. I create an `import_csv` function that is used to import and clean each csv file and I iterate over all csv file using `purrr::map`. I also create variables representing the study arm and study ID of each participant. Since study ID is duplicated over the study arms and is therefore not unique, I also create a `unique_id` variable that can be used to identify each participant.
+
+```{r p2_import, message = FALSE}
+p2_df = 
+  tibble(
+    file_name = list.files(path = "./data/")
+    )
+
+import_csv = function(file) {
+  read_csv(file) %>%
+  janitor::clean_names() %>%
+    pivot_longer(
+      week_1:week_8,
+      names_to = "week",
+      names_prefix = "week_",
+      values_to = "observation"
+    )
+}
+
+p2_df = p2_df %>%
+  mutate(
+    unique_id = seq.int(nrow(p2_df)),
+    study_id = str_sub(file_name, 5, 6),
+    study_arm = ifelse(str_detect(file_name, "con"), "Control", "Experimental"),
+    data = map(str_c('./data/',file_name), import_csv),
+    ) %>%
+  select(-file_name) %>%
+  unnest()
+```
+
+
+
