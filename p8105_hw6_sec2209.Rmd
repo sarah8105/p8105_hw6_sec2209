@@ -49,35 +49,61 @@ homicide_df = read_csv(file = "https://raw.githubusercontent.com/washingtonpost/
 
 ## Problem 2
 
-Problem 2 concerns data from a longitudinal study that includes control and experimental study arms. In the following code chunk, I import data on each study participant that have been stored as separate csv files. I create an `import_csv` function that is used to import and clean each csv file and I iterate over all csv file using `purrr::map`. I also create variables representing the study arm and study ID of each participant. Since study ID is duplicated over the study arms and is therefore not unique, I also create a `unique_id` variable that can be used to identify each participant.
+Problem 2 focuses on understanding the effects of different variables on low birth weight. The data set consists of ~4000 children and factors related to their birth and their parents. In this first code chunk, I import and explore the data to assess distributions and missingness.
 
-```{r p2_import, message = FALSE}
-p2_df = 
-  tibble(
-    file_name = list.files(path = "./data/")
-    )
 
-import_csv = function(file) {
-  read_csv(file) %>%
+```{r bwt_import}
+bwt_df = 
+  read_csv("Data/birthweight.csv") %>%
   janitor::clean_names() %>%
-    pivot_longer(
-      week_1:week_8,
-      names_to = "week",
-      names_prefix = "week_",
-      values_to = "observation"
-    )
-}
-
-p2_df = p2_df %>%
   mutate(
-    unique_id = seq.int(nrow(p2_df)),
-    study_id = str_sub(file_name, 5, 6),
-    study_arm = ifelse(str_detect(file_name, "con"), "Control", "Experimental"),
-    data = map(str_c('./data/',file_name), import_csv),
-    ) %>%
-  select(-file_name) %>%
-  unnest()
+    babysex = as_factor(babysex),
+    frace = as_factor(frace),
+    malform = as_factor(malform),
+    mrace = as_factor(mrace),
+    smoking_status = as_factor(if_else(smoken == 0, 0, 1)),
+    menarche = if_else(menarche == 0, NA_real_, menarche)
+  )  %>%
+  select(-pnumlbw, -pnumsga)
+
+summary(bwt_df)
+
 ```
 
+There appears to be no missing data in this data set, but it's possible that some of the zeros represent missing data. For example, an age of menarchy of 0 is likely missing or erroneous and was therefore set to missing. However, some zeros are likely to be valid entries. For example, an average number of cigarettes smoked of 0 likely indicates that the mother was not a smoker. This variable was converted into a categorical smoking status variable of smoker vs. non-smoker. The number of prior low birth weight or small for gestational age babies is 0 for all subjects, so these variables will be uninformative for our models and were dropped from the data set. 
 
+In the next code chunk I compare three models:
+* Model 1: main effects of length at birth and gestational age only
+* Model 2: including predictors of head circumference, length, sex, and all interactions between these variables
+* Model 3: main effects of length at birth and gestational age, in addition to factors that have been demonstrated as significant predictors of low birth weight in the literature, including mother's race, baby's sex, smoking status, weight gain, and mother's pre-pregnancy BMI
+
+```{r bwt_models}
+model1 = lm(bwt ~ blength + gaweeks, data = bwt_df)
+broom::tidy(model1)
+
+bwt_df %>%
+  modelr::add_predictions(model1) %>%
+  modelr::add_residuals(model1) %>%
+  ggplot(aes(x = resid, y = pred)) +
+    geom_point(alpha = .5)
+
+model2 = lm(bwt ~ bhead + blength + babysex + babysex*bhead*blength, data = bwt_df)
+broom::tidy(model2)
+
+bwt_df %>%
+  modelr::add_predictions(model2) %>%
+  modelr::add_residuals(model2) %>%
+  ggplot(aes(x = resid, y = pred)) +
+    geom_point(alpha = .5)
+  
+model3 = lm(bwt ~ blength + gaweeks + mrace + babysex + smoken + momage + ppbmi + wtgain, data = bwt_df)
+broom::tidy(model3)
+
+bwt_df %>%
+  modelr::add_predictions(model3) %>%
+  modelr::add_residuals(model3) %>%
+  ggplot(aes(x = resid, y = pred)) +
+    geom_point(alpha = .5)
+
+```
 
