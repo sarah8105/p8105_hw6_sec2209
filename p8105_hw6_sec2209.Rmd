@@ -75,35 +75,79 @@ There appears to be no missing data in this data set, but it's possible that som
 In the next code chunk I compare three models:
 * Model 1: main effects of length at birth and gestational age only
 * Model 2: including predictors of head circumference, length, sex, and all interactions between these variables
-* Model 3: main effects of length at birth and gestational age, in addition to factors that have been demonstrated as significant predictors of low birth weight in the literature, including mother's race, baby's sex, smoking status, weight gain, and mother's pre-pregnancy BMI
+* Model 3: predictors in model 1 & 2, in addition to factors that have been demonstrated as significant predictors of low birth weight in the literature, including mother's race, baby's sex, smoking status, weight gain, and mother's pre-pregnancy BMI
 
 ```{r bwt_models}
 model1 = lm(bwt ~ blength + gaweeks, data = bwt_df)
+broom::glance(model1)
 broom::tidy(model1)
 
 bwt_df %>%
   modelr::add_predictions(model1) %>%
   modelr::add_residuals(model1) %>%
-  ggplot(aes(x = resid, y = pred)) +
+  ggplot(aes(x = pred, y = resid)) +
     geom_point(alpha = .5)
 
 model2 = lm(bwt ~ bhead + blength + babysex + babysex*bhead*blength, data = bwt_df)
+broom::glance(model2)
 broom::tidy(model2)
 
 bwt_df %>%
   modelr::add_predictions(model2) %>%
   modelr::add_residuals(model2) %>%
-  ggplot(aes(x = resid, y = pred)) +
+  ggplot(aes(x = pred, y = resid)) +
     geom_point(alpha = .5)
   
-model3 = lm(bwt ~ blength + gaweeks + mrace + babysex + smoken + momage + ppbmi + wtgain, data = bwt_df)
+model3 = lm(bwt ~ blength + gaweeks + bhead + blength + babysex + babysex*bhead*blength + mrace + babysex + smoken + momage + ppbmi + wtgain, data = bwt_df)
+broom::glance(model3)
 broom::tidy(model3)
 
 bwt_df %>%
   modelr::add_predictions(model3) %>%
   modelr::add_residuals(model3) %>%
-  ggplot(aes(x = resid, y = pred)) +
+  ggplot(aes(x = pred, y = resid)) +
     geom_point(alpha = .5)
 
 ```
 
+
+## Problem 3
+
+In this problem, I use 2017 CEntral Park weather data
+
+```{r weather_import}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+
+```{r weather_boot}
+boot_sample = function(df) {
+  sample_frac(df, replace = TRUE) %>%
+  arrange(x)
+} 
+
+boot_straps = 
+  data_frame(
+    strap_number = 1:5000,
+    strap_sample = rerun(5000, boot_sample(weather_df))
+  )
+
+boot_results =
+  boot_straps %>%
+  mutate(
+    models = map(.x = strap_sample, ~lm(tmax ~ tmin, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>%
+  select(strap_number, results) %>%
+  unnest(results)
+```
