@@ -113,9 +113,9 @@ bwt_df %>%
 
 ## Problem 3
 
-In this problem, I use 2017 CEntral Park weather data
+In this problem, I use 2017 Central Park weather data. First, I import the data using the P8105 code.
 
-```{r weather_import}
+```{r weather_import, cache = TRUE}
 weather_df = 
   rnoaa::meteo_pull_monitors(
     c("USW00094728"),
@@ -129,25 +129,62 @@ weather_df =
   select(name, id, everything())
 ```
 
+Next, I run a simple linear regression of tmax on tmin using 5000 bootstrap samples. I also calculate log(β^0 ∗ β^1) for each regression output, plot the distribution of this estimate for all 5000 samples, and calculate the mean and 95% confidence interval. 
 
 ```{r weather_boot}
-boot_sample = function(df) {
-  sample_frac(df, replace = TRUE) %>%
-  arrange(x)
-} 
-
-boot_straps = 
-  data_frame(
-    strap_number = 1:5000,
-    strap_sample = rerun(5000, boot_sample(weather_df))
-  )
-
-boot_results =
-  boot_straps %>%
+boot_strap_results = 
+  weather_df %>%
+  modelr::bootstrap(n = 5000) %>%
   mutate(
-    models = map(.x = strap_sample, ~lm(tmax ~ tmin, data = .x)),
-    results = map(models, broom::tidy)
+    models = map(strap, ~lm(tmax ~ tmin, data = .x) ),
+    results = map(models, broom::tidy),
+    r2 = map(models, broom::glance)) %>%
+  select(-strap, -models) 
+
+terms = 
+  boot_strap_results %>%
+  unnest(results) %>%
+  select(.id, term, estimate) %>%
+  pivot_wider(
+    names_from = "term",
+    values_from = "estimate"
   ) %>%
-  select(strap_number, results) %>%
-  unnest(results)
+  janitor::clean_names() %>%
+  mutate(
+    estimate = log(intercept * tmin)
+  ) 
+
+
+terms %>%
+  ggplot(aes(x = estimate)) + 
+  geom_density()
+
+terms %>%
+  summarize(
+    avg = mean(estimate),
+    lcl = quantile(estimate, 0.025),
+    ucl = quantile(estimate, 0.975)
+    ) %>% 
+  knitr::kable(digits = 2)
+```
+
+In this last code chunk, I plot the distribution of the R^2 for all 5000 samples and calculate the mean and 95% confidence interval.  
+
+```{r p3_plots}
+r2 = 
+  boot_strap_results %>%
+  unnest(r2) 
+
+
+r2 %>%
+  ggplot(aes(x = r.squared)) +
+  geom_density()
+
+r2 %>%
+  summarize(
+    avg = mean(r.squared),
+    lcl = quantile(r.squared, 0.025),
+    ucl = quantile(r.squared, 0.975)
+    ) %>% 
+  knitr::kable(digits = 3)
 ```
