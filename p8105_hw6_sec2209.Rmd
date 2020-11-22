@@ -157,13 +157,18 @@ terms =
 
 terms %>%
   ggplot(aes(x = estimate)) + 
-  geom_density()
+  geom_density() +
+  labs(
+    title = "Distribution in log(β^0 ∗ β^1) Using 5000 Bootstrap Samples",
+    x = "log(β^0 ∗ β^1)",
+    y = "Density"
+  )
 
 terms %>%
   summarize(
-    avg = mean(estimate),
-    lcl = quantile(estimate, 0.025),
-    ucl = quantile(estimate, 0.975)
+    Mean = mean(estimate),
+    LCL = quantile(estimate, 0.025),
+    UCL = quantile(estimate, 0.975)
     ) %>% 
   knitr::kable(digits = 2)
 ```
@@ -178,13 +183,18 @@ r2 =
 
 r2 %>%
   ggplot(aes(x = r.squared)) +
-  geom_density()
+  geom_density() +
+  labs(
+    title = "Distribution in R^2 Using 5000 Bootstrap Samples",
+    x = "R^2",
+    y = "Density"
+  )
 
 r2 %>%
   summarize(
-    avg = mean(r.squared),
-    lcl = quantile(r.squared, 0.025),
-    ucl = quantile(r.squared, 0.975)
+    Mean = mean(r.squared),
+    LCL = quantile(r.squared, 0.025),
+    UCL = quantile(r.squared, 0.975)
     ) %>% 
   knitr::kable(digits = 3)
 ```
