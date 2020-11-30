@@ -39,7 +39,7 @@ In this first code chunk, I pull the Washington Post data on homicides in 50 lar
 ```{r p1_import, cache = TRUE}
 homicide_df = read_csv(file = "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv") %>%
   mutate(
-    city_state = str_c(city, state, sep = "_"),
+    city_state = str_c(city, state, sep = ", "),
     victim_age = as.numeric(victim_age),
     resolution = case_when(
       disposition == "Closed without arrest" ~ 0,
@@ -49,7 +49,7 @@ homicide_df = read_csv(file = "https://raw.githubusercontent.com/washingtonpost/
   ) %>%
   select(city_state, resolution, victim_age, victim_race, victim_sex) %>%
   filter(
-    city_state != "Tulsa_AL",
+    city_state != "Tulsa, AL",
     victim_race %in% c("White", "Black")
     )
 ```
@@ -58,7 +58,7 @@ In the following code chunk, I run a logistic regression model of the homicide r
 ```{r p1_md}
 baltimore_df =
   homicide_df %>%
-  filter(city_state == "Baltimore_MD")
+  filter(city_state == "Baltimore, MD")
 
 glm(resolution ~ victim_age + victim_race + victim_sex,
     data = baltimore_df,
@@ -72,7 +72,7 @@ glm(resolution ~ victim_age + victim_race + victim_sex,
   select(term, OR, starts_with("CI")) %>%
   knitr::kable(digits = 3)
 ```
-Based on the model results, the odds of a homicide being closed are over two-times as high among white victims as compared to black victims and are over 50% lower among male victims as compared to female victims in the city of Baltimore. 
+Based on the model results, the odds of a homicide being resolved in Baltimore are over two-times as high among white victims as compared to black victims after controlling for victim age and sex.
 
 In the next code chunk, I iterate this logistic model over all cities included in the data.
 
@@ -95,25 +95,34 @@ models_results_df =
   select(city_state, term, OR, starts_with("CI")) 
 ```
 
-I then graph the odds ratios and 95% confidence intervals for the sex coefficient by city.
+I then graph the odds ratios and 95% confidence intervals for the race coefficient by city.
 
 ```{r p1_plot}
 models_results_df %>%
-  filter(term == "victim_sexMale") %>%
+  filter(term == "victim_raceWhite") %>%
   mutate(city_state = fct_reorder(city_state, OR)) %>%
   ggplot(aes(x = city_state, y = OR)) +
   geom_point() +
   geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper)) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))  +
+  labs(
+    title = "Adjusted OR for Solving Homicides among White vs. Black Victims",
+    x = "City",
+    y = "Odds Ratio"
+  ) +
+  geom_hline(
+    color = "blue",
+    yintercept = 1
+  ) 
 
 ```
 
-There is wide variation in the estimate across cities. Most cities have an odds ratio below 1, but a handful have an odds ratio above 1, though the confidence interval for these cities cross below 1. 
+There is wide variation in the estimates across cities. Most cities have an odds ratio above 1 (indicating higher odds of solving the homicide for white victims as compared to black victims), but a handful have an odds ratio below 1 (though the confidence interval for these cities cross above 1). Oakland, CA, Omaha, NE, and Boston, MA have the strongest association between victim race and solving the homicide after controlling for victim age and sex. 
 
 
 ## Problem 2
 
-Problem 2 focuses on understanding the effects of different variables on low birth weight. The data set consists of ~4000 children and factors related to their birth and their parents. In this first code chunk, I import and explore the data to assess distributions and missingness in the data.
+Problem 2 focuses on understanding the effects of different variables on child birth weight. The data set consists of ~4000 children and factors related to their birth and their parents. In this first code chunk, I import and explore the data to assess distributions and missingness in the data. I also modify the factor variables (`babysex`: baby sex, `frace`: father's race, `mrace`: mother's race, and `malform`: presence of malformations) to display the actual categorical options instead of the numeric codes.
 
 
 ```{r bwt_import}
@@ -145,7 +154,7 @@ At first glance, there appears to be no missing data in this data set, but it's 
 
 
 In the next code chunk, I run and assess the fit of the first linear regression model on birth weight:
-* Model 1: main effects of length at birth and gestational age only
+ * Model 1: main effects of length at birth and gestational age only
 
 
 ```{r bwt_model1}
@@ -169,7 +178,7 @@ bwt_df %>%
 Based on these results, birth length and gestational age are significant predictors of birth weight. However, there appears to be a skewed residual distribution, with a slight funnel shape as the predicted birth weight increases and poor fit for some outlying values.
 
 In the next code chunk, I run and assess the fit of the second linear regression model on birth weight:
-* Model 2: including predictors of head circumference, length, sex, and all interactions between these variables
+ * Model 2: including predictors of head circumference, length, sex, and all interactions between these variables
 
 ```{r bwt_model2}
 model2 = lm(bwt ~ babysex*bhead*blength, data = bwt_df)
@@ -191,7 +200,7 @@ bwt_df %>%
 This model still shows the funnel shape in the residuals that was seen in model 1.
 
 In the next code chunk, I run and assess the fit of the third linear regression model on birth weight, which was informed by the previous two models and through a review of significant predictors of low birth weight in the literature:
-* Model 3: predictors in model 1 & 2, in addition to mother's race, baby's sex, weight gain, and mother's pre-pregnancy BMI
+ * Model 3: predictors in model 1 & 2, in addition to mother's race, baby's sex, weight gain, and mother's pre-pregnancy BMI
 
 ```{r bwt_model3}
 model3 = lm(bwt ~ blength + gaweeks + babysex*bhead*blength + mrace + babysex + ppbmi + wtgain, data = bwt_df)
@@ -229,7 +238,7 @@ cv_df =
   mutate(
     model1 = map(.x = train, ~lm(bwt ~ blength + gaweeks, data = .x)),
     model2 = map(.x = train, ~lm(bwt ~ babysex*bhead*blength, data = .x)),
-    model3 = map(.x = train, ~lm(log1p(bwt) ~ blength + gaweeks + babysex*bhead*blength + mrace + babysex + ppbmi + wtgain, data = .x))
+    model3 = map(.x = train, ~lm(bwt ~ blength + gaweeks + babysex*bhead*blength + mrace + babysex + ppbmi + wtgain, data = .x))
   ) %>%
   mutate(
     rmse_model1 = map2_dbl(.x = model1, .y = test, ~rmse(model = .x, data = .y)),
@@ -245,19 +254,21 @@ cv_df %>%
     values_to = "rmse",
     names_prefix = "rmse_") %>% 
   mutate(model = fct_inorder(model)) %>% 
-  ggplot(aes(x = model, y = rmse)) + geom_violin()
+  ggplot(aes(x = model, y = rmse, fill = model)) +
+  geom_violin(alpha = .5) +
   labs(
     title = "Comparison of RMSE using Cross Validation",
     x = "Model",
     y = "RMSE"
-  )
+  ) +
+  theme(legend.position = "none")
 ```
 
-Based on these results, model 3 has the lowest distribution in RMSE values and therefore has the best fit based on this criteria. 
+As seen in this plot, model 3 has the lowest distribution in RMSE values and therefore has the best fit based on this criteria. Model 2 also performs relatively well as compared to model 1.
 
 ## Problem 3
 
-In this problem, I use 2017 Central Park weather data. First, I import the data using the P8105 code.
+In this problem, I use 2017 Central Park weather data. First, I import the data using the provided P8105 code.
 
 ```{r weather_import, cache = TRUE}
 weather_df = 
@@ -273,7 +284,7 @@ weather_df =
   select(name, id, everything())
 ```
 
-Next, I run a simple linear regression of tmax on tmin using 5000 bootstrap samples. I also calculate log(β^0 ∗ β^1) for each regression output, plot the distribution of this estimate for all 5000 samples, and calculate the mean and 95% confidence interval. 
+Next, I run a simple linear regression of maximum temperature (`tmax`) on minimum temperature (`tmin`) using 5000 bootstrap samples. I also calculate $log(β^{0} ∗ β^{1})$ for each regression output, plot the distribution of this estimate for all 5000 samples, and calculate the mean and 95% confidence interval. 
 
 ```{r weather_boot}
 boot_strap_results = 
@@ -304,7 +315,7 @@ terms %>%
   geom_density() +
   labs(
     title = "Distribution in log(β^0 ∗ β^1) Using 5000 Bootstrap Samples",
-    x = "log(β^0 ∗ β^1)",
+    x = "$log(β^{0} ∗ β^{1})$",
     y = "Density"
   )
 
@@ -317,7 +328,9 @@ terms %>%
   knitr::kable(digits = 2)
 ```
 
-In this last code chunk, I plot the distribution of the R^2 for all 5000 samples and calculate the mean and 95% confidence interval.  
+The distribution of $log(β^{0} ∗ β^{1})$ follows the typical bell-shape. The mean of $log(β^{0} ∗ β^{1})$) is 2.01 and the 95% confidence interval is 1.97-2.06. 
+
+In this last code chunk, I plot the distribution of the $R^2$ for all 5000 samples and calculate the mean and 95% confidence interval.  
 
 ```{r p3_plots}
 r2 = 
@@ -342,3 +355,5 @@ r2 %>%
     ) %>% 
   knitr::kable(digits = 3)
 ```
+
+The distribution of R^2 follows the typical bell-shape. The mean of $R^2$ is 0.911 and the 95% confidence interval is 0.894-0.927. 
