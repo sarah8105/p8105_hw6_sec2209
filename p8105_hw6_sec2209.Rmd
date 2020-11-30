@@ -12,6 +12,7 @@ library(tidyverse)
 library(rvest)
 library(readr)
 library(httr)
+library(modelr)
 
 knitr::opts_chunk$set(
   fig.width = 6,
@@ -33,23 +34,86 @@ scale_fill_discrete = scale_fill_viridis_d
 
 ## Problem 1
 
-In this first code chunk, I pull the Washington Post data on homicides in 50 large US cities. I create a `city_state` variable that concatenates the city and state that the homicide occurred in and remove an observation that was erroneously attributed to Tulsa, AL. 
+In this first code chunk, I pull the Washington Post data on homicides in 50 large US cities. I create a `city_state` variable that concatenates the city and state that the homicide occurred in and remove an observation that was erroneously attributed to Tulsa, AL. I also create a resolution variable to classify homicides that were closed by arrest versus those that had no arrest and filter to homicides with white or black victims due to low numbers among other race/ethnicities.
 
 ```{r p1_import, cache = TRUE}
 homicide_df = read_csv(file = "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv") %>%
   mutate(
-    city_state = str_c(city, state, sep = "_")
+    city_state = str_c(city, state, sep = "_"),
+    victim_age = as.numeric(victim_age),
+    resolution = case_when(
+      disposition == "Closed without arrest" ~ 0,
+      disposition == "Open/No arrest" ~ 0,
+      disposition == "Closed by arrest" ~ 1
+    )
   ) %>%
-  select(city_state, disposition) %>%
-  filter(city_state != "Tulsa_AL")
+  select(city_state, resolution, victim_age, victim_race, victim_sex) %>%
+  filter(
+    city_state != "Tulsa_AL",
+    victim_race %in% c("White", "Black")
+    )
 ```
 
+In the following code chunk, I run a logistic regression model of the homicide resolution by victim age, race, and sex for the city of Baltimore, MD.
+```{r p1_md}
+baltimore_df =
+  homicide_df %>%
+  filter(city_state == "Baltimore_MD")
 
+glm(resolution ~ victim_age + victim_race + victim_sex,
+    data = baltimore_df,
+    family = binomial()) %>%
+  broom::tidy() %>%
+  mutate(
+    OR = exp(estimate),
+    CI_lower = exp(estimate - 1.96 * std.error),
+    CI_upper = exp(estimate + 1.96 * std.error)
+  ) %>%
+  select(term, OR, starts_with("CI")) %>%
+  knitr::kable(digits = 3)
+```
+Based on the model results, the odds of a homicide being closed are over two-times as high among white victims as compared to black victims and are over 50% lower among male victims as compared to female victims in the city of Baltimore. 
+
+In the next code chunk, I iterate this logistic model over all cities included in the data.
+
+```{r p1_models}
+models_results_df = 
+  homicide_df %>% 
+  nest(data = -city_state) %>% 
+  mutate(
+    models = 
+      map(.x = data, ~glm(resolution ~ victim_age + victim_race + victim_sex, data = .x, family = binomial())),
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(city_state, results) %>% 
+  unnest(results) %>% 
+  mutate(
+    OR = exp(estimate),
+    CI_lower = exp(estimate - 1.96 * std.error),
+    CI_upper = exp(estimate + 1.96 * std.error)
+  ) %>% 
+  select(city_state, term, OR, starts_with("CI")) 
+```
+
+I then graph the odds ratios and 95% confidence intervals for the sex coefficient by city.
+
+```{r p1_plot}
+models_results_df %>%
+  filter(term == "victim_sexMale") %>%
+  mutate(city_state = fct_reorder(city_state, OR)) %>%
+  ggplot(aes(x = city_state, y = OR)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+There is wide variation in the estimate across cities. Most cities have an odds ratio below 1, but a handful have an odds ratio above 1, though the confidence interval for these cities cross below 1. 
 
 
 ## Problem 2
 
-Problem 2 focuses on understanding the effects of different variables on low birth weight. The data set consists of ~4000 children and factors related to their birth and their parents. In this first code chunk, I import and explore the data to assess distributions and missingness.
+Problem 2 focuses on understanding the effects of different variables on low birth weight. The data set consists of ~4000 children and factors related to their birth and their parents. In this first code chunk, I import and explore the data to assess distributions and missingness in the data.
 
 
 ```{r bwt_import}
@@ -61,23 +125,30 @@ bwt_df =
     frace = as_factor(frace),
     malform = as_factor(malform),
     mrace = as_factor(mrace),
-    smoking_status = as_factor(if_else(smoken == 0, 0, 1)),
-    menarche = if_else(menarche == 0, NA_real_, menarche)
-  )  %>%
-  select(-pnumlbw, -pnumsga)
+    frace = recode(frace, "1" = "White", "2" = "Black", 
+           "3" = "Asian", "4" = "Puerto Rican", "8" = "Other", "9" = "Unknown"),
+    mrace = recode(mrace, "1" = "White", "2" = "Black", 
+           "3" = "Asian", "4" = "Puerto Rican", "8" = "Other"),
+    babysex = recode(babysex, "1" = "Male", "2" = "Female"),
+    malform = recode(malform, "1" = "Present", "0" = "Absent")
+  )  
 
-summary(bwt_df)
+summary(bwt_df) 
+
+bwt_df =
+  bwt_df %>%
+  select(-pnumlbw, -pnumsga, -parity, -smoken, -menarche, -fincome)
 
 ```
 
-There appears to be no missing data in this data set, but it's possible that some of the zeros represent missing data. For example, an age of menarchy of 0 is likely missing or erroneous and was therefore set to missing. However, some zeros are likely to be valid entries. For example, an average number of cigarettes smoked of 0 likely indicates that the mother was not a smoker. This variable was converted into a categorical smoking status variable of smoker vs. non-smoker. The number of prior low birth weight or small for gestational age babies is 0 for all subjects, so these variables will be uninformative for our models and were dropped from the data set. 
+At first glance, there appears to be no missing data in this data set, but it's possible that some of the zeros represent missing data. For example, an age of menarchy of 0 is likely missing or erroneous. However, it's possible that some zeros are valid entries. For example, an average number of cigarettes smoked of 0 likely indicates that the mother was not a smoker and a parity of 0 could indicate that this is the first live birth for the mother. Since there is no additional information about how these variables were collected or recorded and I cannot distinguish true zeros from zeros that represent missing data, I dropped all variables that had at least one record with a zero.
 
-In the next code chunk I compare three models:
+
+In the next code chunk, I run and assess the fit of the first linear regression model on birth weight:
 * Model 1: main effects of length at birth and gestational age only
-* Model 2: including predictors of head circumference, length, sex, and all interactions between these variables
-* Model 3: predictors in model 1 & 2, in addition to factors that have been demonstrated as significant predictors of low birth weight in the literature, including mother's race, baby's sex, smoking status, weight gain, and mother's pre-pregnancy BMI
 
-```{r bwt_models}
+
+```{r bwt_model1}
 model1 = lm(bwt ~ blength + gaweeks, data = bwt_df)
 broom::glance(model1)
 broom::tidy(model1)
@@ -86,9 +157,22 @@ bwt_df %>%
   modelr::add_predictions(model1) %>%
   modelr::add_residuals(model1) %>%
   ggplot(aes(x = pred, y = resid)) +
-    geom_point(alpha = .5)
+  geom_point(alpha = .5) +
+  labs(
+    title = "Model 1: Main Effects",
+    x = "Predicted Birth Weight",
+    y = "Residual"
+  )
 
-model2 = lm(bwt ~ bhead + blength + babysex + babysex*bhead*blength, data = bwt_df)
+```
+
+Based on these results, birth length and gestational age are significant predictors of birth weight. However, there appears to be a skewed residual distribution, with a slight funnel shape as the predicted birth weight increases and poor fit for some outlying values.
+
+In the next code chunk, I run and assess the fit of the second linear regression model on birth weight:
+* Model 2: including predictors of head circumference, length, sex, and all interactions between these variables
+
+```{r bwt_model2}
+model2 = lm(bwt ~ babysex*bhead*blength, data = bwt_df)
 broom::glance(model2)
 broom::tidy(model2)
 
@@ -96,9 +180,21 @@ bwt_df %>%
   modelr::add_predictions(model2) %>%
   modelr::add_residuals(model2) %>%
   ggplot(aes(x = pred, y = resid)) +
-    geom_point(alpha = .5)
-  
-model3 = lm(bwt ~ blength + gaweeks + bhead + blength + babysex + babysex*bhead*blength + mrace + babysex + smoken + momage + ppbmi + wtgain, data = bwt_df)
+  geom_point(alpha = .5) +
+  labs(
+    title = "Model 2: Interaction Effects",
+    x = "Predicted Birth Weight",
+    y = "Residual"
+  )
+```
+
+This model still shows the funnel shape in the residuals that was seen in model 1.
+
+In the next code chunk, I run and assess the fit of the third linear regression model on birth weight, which was informed by the previous two models and through a review of significant predictors of low birth weight in the literature:
+* Model 3: predictors in model 1 & 2, in addition to mother's race, baby's sex, weight gain, and mother's pre-pregnancy BMI
+
+```{r bwt_model3}
+model3 = lm(bwt ~ blength + gaweeks + babysex*bhead*blength + mrace + babysex + ppbmi + wtgain, data = bwt_df)
 broom::glance(model3)
 broom::tidy(model3)
 
@@ -106,10 +202,58 @@ bwt_df %>%
   modelr::add_predictions(model3) %>%
   modelr::add_residuals(model3) %>%
   ggplot(aes(x = pred, y = resid)) +
-    geom_point(alpha = .5)
-
+  geom_point(alpha = .5) +
+  labs(
+    title = "Model 3: Log Transformation and Evidence-Based Predictors",
+    x = "Predicted Birth Weight",
+    y = "Residual"
+  )
 ```
 
+This model still has a slight funnel shape in the residuals but appears to be a better fit than the previous two models.
+
+Finally, I compare the three models illustrated above with cross validation using the `crossv_mc` function in the `modelr` package and 100 re-samplings of the training and test data sets. 
+
+```{r bwt_cross}
+cv_df =
+  crossv_mc(bwt_df, 100) 
+
+cv_df =
+  cv_df %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_df =
+  cv_df %>%
+  mutate(
+    model1 = map(.x = train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+    model2 = map(.x = train, ~lm(bwt ~ babysex*bhead*blength, data = .x)),
+    model3 = map(.x = train, ~lm(log1p(bwt) ~ blength + gaweeks + babysex*bhead*blength + mrace + babysex + ppbmi + wtgain, data = .x))
+  ) %>%
+  mutate(
+    rmse_model1 = map2_dbl(.x = model1, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_model2 = map2_dbl(.x = model2, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_model3 = map2_dbl(.x = model3, .y = test, ~rmse(model = .x, data = .y))
+  ) 
+
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+  labs(
+    title = "Comparison of RMSE using Cross Validation",
+    x = "Model",
+    y = "RMSE"
+  )
+```
+
+Based on these results, model 3 has the lowest distribution in RMSE values and therefore has the best fit based on this criteria. 
 
 ## Problem 3
 
