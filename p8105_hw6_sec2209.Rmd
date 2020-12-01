@@ -153,8 +153,9 @@ bwt_df =
 At first glance, there appears to be no missing data in this data set, but it's possible that some of the zeros represent missing data. For example, an age of menarchy of 0 is likely missing or erroneous. However, it's possible that some zeros are valid entries. For example, an average number of cigarettes smoked of 0 likely indicates that the mother was not a smoker and a parity of 0 could indicate that this is the first live birth for the mother. Since there is no additional information about how these variables were collected or recorded and I cannot distinguish true zeros from zeros that represent missing data, I dropped all variables that had at least one record with a zero.
 
 
-In the next code chunk, I run and assess the fit of the first linear regression model on birth weight:
- * Model 1: main effects of length at birth and gestational age only
+In the next code chunk, I run and assess the fit of the first linear regression model on birth weight:  
+ 
+  * *Model 1:* main effects of length at birth and gestational age only
 
 
 ```{r bwt_model1}
@@ -175,10 +176,11 @@ bwt_df %>%
 
 ```
 
-Based on these results, birth length and gestational age are significant predictors of birth weight. However, there appears to be a skewed residual distribution, with a slight funnel shape as the predicted birth weight increases and poor fit for some outlying values.
+Based on these results, birth length and gestational age are significant predictors of birth weight. However, there appears to be a skewed residual distribution, with a slight funnel shape as the predicted birth weight increases and poor fit for some outlying values.  
 
-In the next code chunk, I run and assess the fit of the second linear regression model on birth weight:
- * Model 2: including predictors of head circumference, length, sex, and all interactions between these variables
+In the next code chunk, I run and assess the fit of the second linear regression model on birth weight:  
+ 
+  * *Model 2:* including predictors of head circumference, length, sex, and all interactions between these variables
 
 ```{r bwt_model2}
 model2 = lm(bwt ~ babysex*bhead*blength, data = bwt_df)
@@ -197,10 +199,11 @@ bwt_df %>%
   )
 ```
 
-This model still shows the funnel shape in the residuals that was seen in model 1.
+This model still shows an even more distinct funnel shape in the residuals than was seen in model 1.
 
-In the next code chunk, I run and assess the fit of the third linear regression model on birth weight, which was informed by the previous two models and through a review of significant predictors of low birth weight in the literature:
- * Model 3: predictors in model 1 & 2, in addition to mother's race, baby's sex, weight gain, and mother's pre-pregnancy BMI
+In the next code chunk, I run and assess the fit of the third linear regression model on birth weight, which was informed by the previous two models and through a review of significant predictors of low birth weight in the literature:  
+  
+  * *Model 3:* predictors in model 1 & 2, in addition to mother's race, baby's sex, weight gain, and mother's pre-pregnancy BMI
 
 ```{r bwt_model3}
 model3 = lm(bwt ~ blength + gaweeks + babysex*bhead*blength + mrace + babysex + ppbmi + wtgain, data = bwt_df)
@@ -284,7 +287,7 @@ weather_df =
   select(name, id, everything())
 ```
 
-Next, I run a simple linear regression of maximum temperature (`tmax`) on minimum temperature (`tmin`) using 5000 bootstrap samples. I also calculate $log(β^{0} ∗ β^{1})$ for each regression output, plot the distribution of this estimate for all 5000 samples, and calculate the mean and 95% confidence interval. 
+Next, I run a simple linear regression of maximum temperature (`tmax`) on minimum temperature (`tmin`) using 5000 bootstrap samples. I also calculate log(β^0 ∗ β^1) for each regression output, plot the distribution of this estimate for all 5000 samples, and calculate the mean and 95% confidence interval. 
 
 ```{r weather_boot}
 boot_strap_results = 
@@ -315,7 +318,7 @@ terms %>%
   geom_density() +
   labs(
     title = "Distribution in log(β^0 ∗ β^1) Using 5000 Bootstrap Samples",
-    x = "$log(β^{0} ∗ β^{1})$",
+    x = "log(β^0 ∗ β^1)",
     y = "Density"
   )
 
@@ -328,9 +331,9 @@ terms %>%
   knitr::kable(digits = 2)
 ```
 
-The distribution of $log(β^{0} ∗ β^{1})$ follows the typical bell-shape. The mean of $log(β^{0} ∗ β^{1})$) is 2.01 and the 95% confidence interval is 1.97-2.06. 
+The distribution of log(β^0 ∗ β^1) follows the typical bell-shape. The mean of log(β^0 ∗ β^1) is 2.01 and the 95% confidence interval is 1.97-2.06. 
 
-In this last code chunk, I plot the distribution of the $R^2$ for all 5000 samples and calculate the mean and 95% confidence interval.  
+In this last code chunk, I plot the distribution of the R^2 for all 5000 samples and calculate the mean and 95% confidence interval.  
 
 ```{r p3_plots}
 r2 = 
@@ -356,4 +359,4 @@ r2 %>%
   knitr::kable(digits = 3)
 ```
 
-The distribution of R^2 follows the typical bell-shape. The mean of $R^2$ is 0.911 and the 95% confidence interval is 0.894-0.927. 
+The distribution of R^2 also follows the typical bell-shape. The mean of R^2 is 0.911 and the 95% confidence interval is 0.894-0.927. 
